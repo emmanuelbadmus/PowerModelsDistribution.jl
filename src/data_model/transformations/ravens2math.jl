@@ -729,7 +729,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
             # data is measured externally, but we now refer it to the internal side - some values are referred to wdg 1
             ratios = vnom/voltage_scale_factor
-            x_sc = (x_sc[1]./ratios[1]^2)./100.0
+            x_sc = (x_sc[1]./ratios[1]^2)
             r_s = r_s./ratios.^2
             g_sh = g_sh[1]*ratios[1]^2
             b_sh = b_sh[1]*ratios[1]^2
@@ -911,16 +911,19 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                     snom_wdg = transf_end_info[wdg_endNumber]["TransformerEndInfo.ratedS"]
                     zbase = (vnom_wdg^2) / snom_wdg
                     ratios = vnom_wdg/voltage_scale_factor
+                    ratios_wdg1 = ratios
 
                     # assign vnom_wdg to vnom for transformer
                     vnom[wdg_endNumber] = vnom_wdg
 
                     # Transformer star impedance when values are missing for other windings.
-                    if (wdg_endNumber != 1 && transf_star_impedance != Dict())
-                        transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", transf_end_info[wdg_endNumber-1]["TransformerEndInfo.TransformerStarImpedance"])
-                        ratios = vnom[wdg_endNumber-1]/voltage_scale_factor
-                    else
-                        transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", Dict())
+                    if (wdg_endNumber != 1)
+                        ratios_wdg1 = vnom[1]/voltage_scale_factor  # HV wdg1
+                        if (transf_star_impedance != Dict())
+                            transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", transf_end_info[wdg_endNumber-1]["TransformerEndInfo.TransformerStarImpedance"])
+                        else
+                            transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", Dict())
+                        end
                     end
 
                     # resistance computation
@@ -940,7 +943,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
                     # RS and XSC computation based on ratios
                     r_s[wdg_endNumber][tank_id] = r_s[wdg_endNumber][tank_id]/ratios^2
-                    x_sc[wdg_endNumber][tank_id] = (x_sc[wdg_endNumber][tank_id]/ratios^2)
+                    x_sc[wdg_endNumber][tank_id] = (x_sc[wdg_endNumber][tank_id]/ratios_wdg1^2)
 
                     # g_sh always with respect to wdg #1 always
                     if wdg_endNumber == 1
@@ -952,8 +955,8 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                         cmag = sqrt(exct_current^2 - pctNoLoadLoss^2)/100
                         b_sh_tank = -(cmag*snom_wdg)/(vnom_wdg^2)
                         # data is measured externally, but we now refer it to the internal side
-                        g_sh[tank_id] = g_sh_tank*ratios^2
-                        b_sh[tank_id] = b_sh_tank*ratios^2
+                        g_sh[tank_id] = g_sh_tank*ratios_wdg1^2
+                        b_sh[tank_id] = b_sh_tank*ratios_wdg1^2
                     end
 
                     # configuration
