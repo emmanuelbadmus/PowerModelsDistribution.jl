@@ -958,15 +958,16 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                     r_s[wdg_endNumber][tank_id] = r_s[wdg_endNumber][tank_id]/ratios[wdg_endNumber]^2
                     x_sc[wdg_endNumber][tank_id] = (x_sc[wdg_endNumber][tank_id]/ratios[1]^2)   # w.r.t wdg1
 
-                    # g_sh always with respect to wdg #1 always
+                    # b_sh and g_sh are always w.r.t wdg #1
                     if wdg_endNumber == 1
                         transf_end_noloadtest = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.EnergisedEndNoLoadTests", [Dict()])
                         loss = get(transf_end_noloadtest[1], "NoLoadTest.loss", 0.0)
-                        g_sh_tank =  (loss/(0.01*(snom_wdg/1000.0)))/zbase[wdg_endNumber]
-                        pctNoLoadLoss = loss*100.0/(0.01*(snom_wdg/1000.0))
+                        pctNoLoadLoss = (loss*100)/(snom_wdg/1000.0)    # TODO: if loss is in kW, then you need snom_wdg/1000.0, if is in Watts, then snom_wdg
+                        noLoadLoss = pctNoLoadLoss/100.0
+                        g_sh_tank =  noLoadLoss/zbase[wdg_endNumber]
                         exct_current = get(transf_end_noloadtest[1], "NoLoadTest.excitingCurrent", pctNoLoadLoss)
-                        cmag = sqrt(exct_current^2 - pctNoLoadLoss^2)/100
-                        b_sh_tank = -(cmag*snom_wdg)/(vnom[wdg_endNumber]^2)
+                        cmag = sqrt(exct_current^2 - pctNoLoadLoss^2)/100   # cmag = pctImag/100 = sqrt(pctIexc^2 - pctNoLoadLoss^2)/100
+                        b_sh_tank = -(cmag)/zbase[wdg_endNumber]
                         # data is measured externally, but we now refer it to the internal side
                         g_sh[tank_id] = g_sh_tank*ratios[1]^2   # w.r.t wdg1
                         b_sh[tank_id] = b_sh_tank*ratios[1]^2   # w.r.t wdg1
