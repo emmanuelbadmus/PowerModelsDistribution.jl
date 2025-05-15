@@ -640,21 +640,38 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                 # Transformer data for each winding
                 vnom[wdg_endNumber] = wdgs[wdg_endNumber]["PowerTransformerEnd.ratedU"]
                 snom[wdg_endNumber] = wdgs[wdg_endNumber]["PowerTransformerEnd.ratedS"]
+                zbase[wdg_endNumber] = (vnom[wdg_endNumber]^2)/snom[wdg_endNumber]
 
                 # Add vnom info to vbases
                 data_math["settings"]["vbases_network"][string(bus)] = deepcopy(vnom[wdg_endNumber]/voltage_scale_factor)
 
-                # resistance
-                transf_star_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.StarImpedance", Dict())
-                transf_mesh_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.MeshImpedance", Dict())
+                # Transformer impedance when values are missing for other windings.
+                xfmr_star_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.StarImpedance", Dict())
+                xfmr_star_impedance_r = get(xfmr_star_impedance, "TransformerStarImpedance.r", 0.0)
 
-                r_s[wdg_endNumber] = get(wdgs[wdg_endNumber], "PowerTransformerEnd.r",
-                                        get(transf_star_impedance, "TransformerStarImpedance.r",
-                                            get(transf_mesh_impedance, "TransformerMeshImpedance.r", 0.0))./2) # divide by 2 because XFRMR Star Resistance includes both windings.
+                if (xfmr_star_impedance == Dict())
+                    xfmr_star_impedance_wdg1 = get(wdgs[1], "TransformerEnd.StarImpedance", Dict())
+                    if (xfmr_star_impedance_wdg1 != Dict())
+                        xfmr_star_impedance_r = get(xfmr_star_impedance_wdg1, "TransformerStarImpedance.r", 0.0).*(zbase[wdg_endNumber]/zbase[1])
+                    end
+                end
+
+                xfmr_mesh_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.MeshImpedance", Dict())
+                xfmr_mesh_impedance_r = get(xfmr_mesh_impedance, "TransformerMeshImpedance.r", 0.0)
+
+                if (xfmr_mesh_impedance == Dict())
+                    xfmr_mesh_impedance_wdg1 = get(wdgs[1], "TransformerEnd.MeshImpedance", Dict())
+                    if (xfmr_mesh_impedance_wdg1 != Dict())
+                        xfmr_mesh_impedance_r = get(xfmr_mesh_impedance_wdg1, "TransformerMeshImpedance.r", 0.0).*(zbase[wdg_endNumber]/zbase[1])
+                    end
+                end
+
+                # resistance
+                r_s[wdg_endNumber] = get(wdgs[wdg_endNumber], "PowerTransformerEnd.r", (xfmr_star_impedance_r != 0.0 ? xfmr_star_impedance_r : xfmr_mesh_impedance_r)./2)    # divide by 2 because XFRMR Star Resistance includes both windings.
 
                 # reactance
-                x_sc[wdg_endNumber] = get(transf_mesh_impedance, "TransformerMeshImpedance.x",
-                                        get(transf_star_impedance, "TransformerStarImpedance.x", 0.0))
+                x_sc[wdg_endNumber] = get(xfmr_mesh_impedance, "TransformerMeshImpedance.x",
+                                        get(xfmr_star_impedance, "TransformerStarImpedance.x", 0.0))
 
                 # admittance
                 transf_core_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.CoreAdmittance", Dict())
@@ -856,6 +873,8 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
             # init vnom for all windings
             vnom = zeros(Float64, nrw)
+            ratios = zeros(Float64, nrw)
+            zbase = zeros(Float64, nrw)
 
             # temp store previous for checking
             nodes_prev = []
@@ -868,9 +887,6 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
             tm_ub = Vector{Vector{Float64}}(fill(fill(1.1, nphases), nrw))
             tm_fix = Vector{Vector{Bool}}(fill(ones(Bool, nphases), nrw))
             tm_step = Vector{Vector{Float64}}(fill(fill(1/32, nphases), nrw))
-
-            # Init transf_star_impedance
-            transf_star_impedance = Dict()
 
             for tank_id in 1:ntanks
 
@@ -907,56 +923,53 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
                     # transformer tank end info.
                     transf_end_info = tank_asset_data["PowerTransformerInfo.TransformerTankInfos"][tank_asset_name]["TransformerTankInfo.TransformerEndInfos"]
-                    vnom_wdg = transf_end_info[wdg_endNumber]["TransformerEndInfo.ratedU"]
+                    vnom[wdg_endNumber] = transf_end_info[wdg_endNumber]["TransformerEndInfo.ratedU"]
                     snom_wdg = transf_end_info[wdg_endNumber]["TransformerEndInfo.ratedS"]
-                    zbase = (vnom_wdg^2) / snom_wdg
-                    ratios = vnom_wdg/voltage_scale_factor
-                    ratios_wdg1 = ratios
+                    zbase[wdg_endNumber] = (vnom[wdg_endNumber]^2) / snom_wdg
 
-                    # assign vnom_wdg to vnom for transformer
-                    vnom[wdg_endNumber] = vnom_wdg
+                    # Compute voltage ratios
+                    ratios[wdg_endNumber] = vnom[wdg_endNumber]/voltage_scale_factor
 
                     # Transformer star impedance when values are missing for other windings.
-                    if (wdg_endNumber != 1)
-                        ratios_wdg1 = vnom[1]/voltage_scale_factor  # HV wdg1
-                        if (transf_star_impedance != Dict())
-                            transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", transf_end_info[wdg_endNumber-1]["TransformerEndInfo.TransformerStarImpedance"])
-                        else
-                            transf_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", Dict())
+                    xfmr_star_impedance = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.TransformerStarImpedance", Dict())
+                    xfmr_star_impedance_r = get(xfmr_star_impedance, "TransformerStarImpedance.r", 0.0)
+                    if (xfmr_star_impedance == Dict())
+                        xfmr_star_impedance_wdg1 = get(transf_end_info[1], "TransformerEndInfo.TransformerStarImpedance", Dict())
+                        if (xfmr_star_impedance_wdg1 != Dict())
+                            xfmr_star_impedance_r = get(xfmr_star_impedance_wdg1, "TransformerStarImpedance.r", 0.0).*(zbase[wdg_endNumber]/zbase[1])
                         end
                     end
 
                     # resistance computation
-                    r_s[wdg_endNumber][tank_id] = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.r",
-                                        get(transf_star_impedance, "TransformerStarImpedance.r", 0.0)./2) # divide by 2 because XFRMR Star Resistance includes both windings.
+                    r_s[wdg_endNumber][tank_id] = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.r", xfmr_star_impedance_r./2) # divide by 2 because XFRMR Star Resistance includes both windings.
 
                     # reactance computation
                     x_sc[wdg_endNumber][tank_id] = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.x",
-                                        get(transf_star_impedance, "TransformerStarImpedance.x", 0.0))
+                                        get(xfmr_star_impedance, "TransformerStarImpedance.x", 0.0))
 
                     # -- alternative computation of xsc using sc tests
                     if haskey(transf_end_info[wdg_endNumber], "TransformerEndInfo.EnergisedEndShortCircuitTests")
                         leak_impedance_wdg = transf_end_info[wdg_endNumber]["TransformerEndInfo.EnergisedEndShortCircuitTests"][1]["ShortCircuitTest.leakageImpedance"]
-                        rs_pct = (r_s[wdg_endNumber][tank_id]/zbase)*100.0
-                        x_sc[wdg_endNumber][tank_id] = (sqrt((leak_impedance_wdg/zbase)^2 - (rs_pct+rs_pct)^2)/100)*zbase
+                        rs_pct = (r_s[wdg_endNumber][tank_id]/zbase[wdg_endNumber])*100.0
+                        x_sc[wdg_endNumber][tank_id] = (sqrt((leak_impedance_wdg/zbase[wdg_endNumber])^2 - (rs_pct+rs_pct)^2)/100)*zbase[wdg_endNumber]
                     end
 
                     # RS and XSC computation based on ratios
-                    r_s[wdg_endNumber][tank_id] = r_s[wdg_endNumber][tank_id]/ratios^2
-                    x_sc[wdg_endNumber][tank_id] = (x_sc[wdg_endNumber][tank_id]/ratios_wdg1^2)
+                    r_s[wdg_endNumber][tank_id] = r_s[wdg_endNumber][tank_id]/ratios[wdg_endNumber]^2
+                    x_sc[wdg_endNumber][tank_id] = (x_sc[wdg_endNumber][tank_id]/ratios[1]^2)   # w.r.t wdg1
 
                     # g_sh always with respect to wdg #1 always
                     if wdg_endNumber == 1
                         transf_end_noloadtest = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.EnergisedEndNoLoadTests", [Dict()])
                         loss = get(transf_end_noloadtest[1], "NoLoadTest.loss", 0.0)
-                        g_sh_tank =  (loss/(0.01*(snom_wdg/1000.0)))/zbase
+                        g_sh_tank =  (loss/(0.01*(snom_wdg/1000.0)))/zbase[wdg_endNumber]
                         pctNoLoadLoss = loss*100.0/(0.01*(snom_wdg/1000.0))
                         exct_current = get(transf_end_noloadtest[1], "NoLoadTest.excitingCurrent", pctNoLoadLoss)
                         cmag = sqrt(exct_current^2 - pctNoLoadLoss^2)/100
-                        b_sh_tank = -(cmag*snom_wdg)/(vnom_wdg^2)
+                        b_sh_tank = -(cmag*snom_wdg)/(vnom[wdg_endNumber]^2)
                         # data is measured externally, but we now refer it to the internal side
-                        g_sh[tank_id] = g_sh_tank*ratios_wdg1^2
-                        b_sh[tank_id] = b_sh_tank*ratios_wdg1^2
+                        g_sh[tank_id] = g_sh_tank*ratios[1]^2   # w.r.t wdg1
+                        b_sh[tank_id] = b_sh_tank*ratios[1]^2   # w.r.t wdg1
                     end
 
                     # configuration
@@ -970,7 +983,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                     end
 
                     # add sm_ub if greater than existing (assumes the greatest value as the ratings for all phases in wdg)
-                    semerg_wdg = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.emergencyS", Inf)
+                    semerg_wdg = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.emergencyS", get(transf_end_info[wdg_endNumber], "TransformerEndInfo.ratedS", Inf))
                     if semerg_wdg > sm_ub[wdg_endNumber]
                         sm_ub[wdg_endNumber] = semerg_wdg
                     end
@@ -1080,10 +1093,11 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
             end
 
             # wdg i, tank 1  - assumes tank 1 always exists
-            r_s = [r_s[i][1] for i in 1:nrw]
-            x_sc = [x_sc[1][1]] # wrt to wdg 1
-            g_sh = g_sh[1]      # wrt to wdg 1
-            b_sh = b_sh[1]      # wrt to wdg 1
+            r_s = [sum(r_s[i]) for i in 1:nrw]
+            x_sc = [sum(x_sc[i]) for i in 1:nrw] # sum the x_sc for all tanks per wdg
+            x_sc = [x_sc[1]]      # get x_sc wrt to wdg 1
+            g_sh = sum(g_sh)      # wrt to wdg 1
+            b_sh = sum(b_sh)      # wrt to wdg 1
 
             # convert x_sc from list of upper triangle elements to an explicit dict
             y_sh = g_sh + im*b_sh
@@ -1098,6 +1112,10 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
             # Build loss model
             transformer_t_bus_w = _build_loss_model!(data_math, name, to_map, r_s, z_sc, y_sh, connections[1]; nphases=nphases, status=status)
+
+            # Compute total upper bounds based on number of tanks
+            sm_ub = sm_ub.*ntanks
+            cm_ub = cm_ub.*ntanks
 
             # Mathematical model for transformer
             for wdg_id in 1:nrw
@@ -1897,7 +1915,7 @@ function _map_ravens2math_switch!(data_math::Dict{String,<:Any}, data_ravens::Di
             math_obj["current_rating"] = fill(get(swinfo_data, "SwitchInfo.breakingCapacity", get(swinfo_data, "SwitchInfo.ratedCurrent", Inf)), nphases)
             math_obj["sm_ub"] = math_obj["current_rating"] .* get(swinfo_data, "SwitchInfo.ratedVoltage", Inf)
         else
-            math_obj["current_rating"] = fill(get(swinfo_data, "SwitchInfo.breakingCapacity", get(swinfo_data, "SwitchInfo.ratedCurrent", Inf)), nphases)
+            math_obj["current_rating"] = fill(get(ravens_obj, "Switch.ratedCurrent", Inf))
             math_obj["sm_ub"] = math_obj["current_rating"] .* get(ravens_obj, "Switch.ratedVoltage", Inf)
         end
 
