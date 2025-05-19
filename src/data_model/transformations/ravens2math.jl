@@ -962,7 +962,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                     if wdg_endNumber == 1
                         transf_end_noloadtest = get(transf_end_info[wdg_endNumber], "TransformerEndInfo.EnergisedEndNoLoadTests", [Dict()])
                         loss = get(transf_end_noloadtest[1], "NoLoadTest.loss", 0.0)
-                        pctNoLoadLoss = (loss*100)/(snom_wdg/1000.0)    # TODO: if loss is in kW, then you need snom_wdg/1000.0, if is in Watts, then snom_wdg
+                        pctNoLoadLoss = (loss*100)/(snom_wdg/1000.0)    # loss is in kW, thus snom_wdg/1000.0
                         noLoadLoss = pctNoLoadLoss/100.0
                         g_sh_tank =  noLoadLoss/zbase[wdg_endNumber]
                         exct_current = get(transf_end_noloadtest[1], "NoLoadTest.excitingCurrent", pctNoLoadLoss)
