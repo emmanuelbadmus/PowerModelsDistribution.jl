@@ -1298,8 +1298,8 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
                 if haskey(ravens_obj, "EnergyConsumer.EnergyConsumerPhase")
                     for id in 1:nphases
                         phase_info = ravens_obj["EnergyConsumer.EnergyConsumerPhase"][id]
-                        active_power[id] = phase_info["EnergyConsumerPhase.p"]
-                        reactive_power[id] = phase_info["EnergyConsumerPhase.q"]
+                        active_power[id] = get(phase_info, "EnergyConsumerPhase.p", 0.0)
+                        reactive_power[id] = get(phase_info, "EnergyConsumerPhase.q", 0.0)
                     end
                 else
                     active_power = fill(get(ravens_obj, "EnergyConsumer.p", 0.0) / (power_scale_factor*nphases), nphases)
