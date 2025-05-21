@@ -41,8 +41,6 @@ function transform_data_model_ravens(
     correct_network_data::Bool=true,
     )::Dict{String,Any}
 
-    current_data_model = get(data, "data_model", MATHEMATICAL)
-
     data_math = _map_ravens2math(
         data;
         multinetwork=multinetwork,

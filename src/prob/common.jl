@@ -143,16 +143,17 @@ function instantiate_mc_model_ravens(
     kwargs...
     )
 
-    @info "Converting CIM-RAVENS data model to MATHEMATICAL first to build JuMP model"
-
-    data = transform_data_model_ravens(
-            data;
-            multinetwork=multinetwork,
-            global_keys=global_keys,
-            ravens2math_extensions=ravens2math_extensions,
-            ravens2math_passthrough=ravens2math_passthrough,
-            make_pu_extensions=make_pu_extensions,
+    if !ismath(data)
+        @info "Converting CIM-RAVENS data model to MATHEMATICAL first to build JuMP model"
+        data = transform_data_model_ravens(
+                data;
+                multinetwork=multinetwork,
+                global_keys=global_keys,
+                ravens2math_extensions=ravens2math_extensions,
+                ravens2math_passthrough=ravens2math_passthrough,
+                make_pu_extensions=make_pu_extensions,
         )
+    end
 
     return _IM.instantiate_model(
         data,
