@@ -135,3 +135,29 @@ function _calc_shunt_admittance_matrix(terminals, b)
     return _shunt_matrix
 
 end
+
+
+"""
+    apply_voltage_bounds_math!(data::Dict{String,<:Any}; vm_lb::Union{Real,Missing}=0.9, vm_ub::Union{Real,Missing}=1.1)
+
+add voltage bounds to all buses based on per-unit upper (`vm_ub`) and lower (`vm_lb`), in MATHEMATICAL.
+"""
+function apply_voltage_bounds_math!(data::Dict{String,<:Any}; vm_lb::Union{Real,Missing}=0.9, vm_ub::Union{Real,Missing}=1.1)
+    if ismultinetwork(data)
+        for (_, nw_data) in data["nw"]
+            for (_, bus_data) in nw_data["bus"]
+                if (bus_data["bus_type"] != 3)
+                    bus_data["vmin"] = ones(length(bus_data["vmin"])).*vm_lb
+                    bus_data["vmax"] = ones(length(bus_data["vmax"])).*vm_ub
+                end
+            end
+        end
+    else
+        for (_, bus_data) in data["bus"]
+            if (bus_data["bus_type"] != 3)
+                bus_data["vmin"] = ones(length(bus_data["vmin"])).*vm_lb
+                bus_data["vmax"] = ones(length(bus_data["vmax"])).*vm_ub
+            end
+        end
+    end
+end
