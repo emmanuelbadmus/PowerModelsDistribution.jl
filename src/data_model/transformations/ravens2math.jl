@@ -1900,12 +1900,23 @@ function _map_ravens2math_switch!(data_math::Dict{String,<:Any}, data_ravens::Di
         math_obj["status"] = status = math_obj["status"] == true ? 1 : 0
 
         # State
-        sw_state = get(ravens_obj, "Switch.open", false)
-        sw_state = sw_state == false ? CLOSED : OPEN
+        sw_state = CLOSED
+        if (haskey(ravens_obj, "Switch.SwitchPhase"))
+            sw_state = get(ravens_obj["Switch.SwitchPhase"][1], "SwitchPhase.closed", true)
+            sw_state = sw_state == true ? CLOSED : OPEN
+        else
+            sw_state = get(ravens_obj, "Switch.open", false)
+            sw_state = sw_state == false ? CLOSED : OPEN
+        end
         math_obj["state"] = Int(sw_state)
 
-        # TODO: Dispatchable
-        math_obj["dispatchable"] = Int(get(ravens_obj, "dispatchable", YES))
+        # Dispatchable
+        sw_type = get(ravens_obj, "Ravens.cimObjectType", "Switch")
+        if (sw_type == "Fuse" || sw_type == "Jumper")
+            math_obj["dispatchable"] = Int(NO)
+        else
+            math_obj["dispatchable"] = Int(YES)
+        end
 
         # Current and Power Limits
         if haskey(ravens_obj, "PowerSystemResource.AssetDatasheet")
