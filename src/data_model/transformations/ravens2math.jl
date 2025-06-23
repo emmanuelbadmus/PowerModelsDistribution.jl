@@ -1902,10 +1902,10 @@ function _map_ravens2math_switch!(data_math::Dict{String,<:Any}, data_ravens::Di
         # State
         sw_state = CLOSED
         if (haskey(ravens_obj, "Switch.SwitchPhase"))
-            sw_closed = get(ravens_obj["Switch.SwitchPhase"][1], "SwitchPhase.closed", false)
+            sw_closed = get(ravens_obj["Switch.SwitchPhase"][1], "SwitchPhase.closed", true)
             sw_state = sw_closed == true ? CLOSED : OPEN
         else
-            sw_open = get(ravens_obj, "Switch.open", true)
+            sw_open = get(ravens_obj, "Switch.open", false)
             sw_state = sw_open == false ? CLOSED : OPEN
         end
         math_obj["state"] = Int(sw_state)
