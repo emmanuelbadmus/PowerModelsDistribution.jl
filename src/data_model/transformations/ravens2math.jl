@@ -72,7 +72,7 @@ function _map_ravens2math(
     _data_ravens = deepcopy(data_ravens)
 
     # TODO: Add settings (defaults)
-    basemva = 100
+    basemva = 1
     _settings = Dict("sbase_default" => basemva * 1e3,
                     "voltage_scale_factor" => 1e3,
                     "power_scale_factor" => 1e3,
