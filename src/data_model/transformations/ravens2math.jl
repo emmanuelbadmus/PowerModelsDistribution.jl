@@ -744,7 +744,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
             # data is measured externally, but we now refer it to the internal side - some values are referred to wdg 1
             ratios = vnom/voltage_scale_factor
-            x_sc = (x_sc[1]./ratios[1]^2)
+            x_sc = (x_sc./ratios[1]^2)
             r_s = r_s./ratios.^2
             g_sh = g_sh[1]*ratios[1]^2
             b_sh = b_sh[1]*ratios[1]^2
@@ -1423,7 +1423,6 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
 
         # Handle phase-specific or three-phase connection
         connections = Vector{Int64}()
-        nconductors = length(get(ravens_obj, "EnergySource.EnergySourcePhase", bus_conn["terminals"]))
 
         if haskey(ravens_obj, "EnergySource.EnergySourcePhase")
             for phase_info in ravens_obj["EnergySource.EnergySourcePhase"]
@@ -1440,6 +1439,18 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
                 math_obj["connections"] = bus_conn["terminals"]
             end
         end
+
+        # Check that connections and bus terminals have the same number of phases, if not, assume connections is correct
+        if (bus_conn["terminals"] != math_obj["connections"])
+            bus_conn["terminals"] = math_obj["connections"]
+            nphases = length(bus_conn["terminals"])
+            # Add vmin and vmax to bus if missing (correct number of terminals)
+            bus_conn["vmin"] = fill(0.0, nphases)
+            bus_conn["vmax"] = fill(Inf, nphases)
+            bus_conn["grounded"] = zeros(Bool, nphases)
+        end
+
+        nconductors = length(get(ravens_obj, "EnergySource.EnergySourcePhase", bus_conn["terminals"]))
 
         # Generator status and configuration
         math_obj["gen_status"] = haskey(ravens_obj, "Equipment.inService") ? ravens_obj["Equipment.inService"] : true
