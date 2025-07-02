@@ -1926,7 +1926,8 @@ function _map_ravens2math_switch!(data_math::Dict{String,<:Any}, data_ravens::Di
         if (sw_type == "Fuse" || sw_type == "Jumper")
             math_obj["dispatchable"] = Int(NO)
         else
-            math_obj["dispatchable"] = Int(YES)
+            dispatch_locked = get(ravens_obj, "Switch.locked", false)
+            math_obj["dispatchable"] = dispatch_locked == true ? Int(NO) : Int(YES)
         end
 
         # Current and Power Limits
