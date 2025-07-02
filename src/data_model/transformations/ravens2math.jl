@@ -240,11 +240,11 @@ function _map_ravens2math_connectivity_node!(data_math::Dict{String,<:Any}, data
 
     for (name, ravens_obj) in connectivity_nodes
         index = length(data_math["bus"]) + 1
-        math_obj = _init_math_obj_ravens("bus", name, ravens_obj, index; pass_props=pass_props)
+        math_obj = _init_math_obj_ravens("ConnectivityNode", name, ravens_obj, index; pass_props=pass_props)
 
         # Set basic bus properties
         math_obj["bus_i"] = index
-        math_obj["source_id"] = "bus.$name"
+        math_obj["source_id"] = "ConnectivityNode.$name"
         math_obj["bus_type"] = 1  # Default bus_type, will be modified as needed
         math_obj["vm_pair_lb"] = Tuple{Any, Any, Real}[]
         math_obj["vm_pair_ub"] = Tuple{Any, Any, Real}[]
@@ -284,7 +284,7 @@ function _map_ravens2math_conductor!(data_math::Dict{String,<:Any}, data_ravens:
         conductors = data_ravens["PowerSystemResource"]["Equipment"]["ConductingEquipment"]["Conductor"]
 
         for (name, ravens_obj) in get(conductors, "ACLineSegment", Dict{Any,Dict{String,Any}}())
-            math_obj = _init_math_obj_ravens("conductor", name, ravens_obj, length(data_math["branch"]) + 1; pass_props=pass_props)
+            math_obj = _init_math_obj_ravens("ACLineSegment", name, ravens_obj, length(data_math["branch"]) + 1; pass_props=pass_props)
             nconds = length(ravens_obj["ACLineSegment.ACLineSegmentPhase"]) # number of conductors/wires
             nphases = 0 # init number of phases
             terminals = ravens_obj["ConductingEquipment.Terminals"]
@@ -792,7 +792,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                 # Transformer Object
                 transformer_2wa_obj = Dict{String,Any}(
                     "name"          => "_virtual_transformer.$name.$wdg_id",
-                    "source_id"     => "_virtual_transformer.transformer.$name.$wdg_id",
+                    "source_id"     => "_virtual_transformer.PowerTransformer.$name.$wdg_id",
                     "f_bus"         => data_math["bus_lookup"][f_node_wdgterm],
                     "t_bus"         => transformer_t_bus_w[wdg_id],
                     "tm_nom"        => tm_nom,
@@ -1138,7 +1138,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                 # Transformer Object
                 transformer_2wa_obj = Dict{String,Any}(
                     "name"          => "_virtual_transformer.$name.$wdg_id",
-                    "source_id"     => "_virtual_transformer.transformer.$name.$wdg_id",
+                    "source_id"     => "_virtual_transformer.PowerTransformer.$name.$wdg_id",
                     "f_bus"         => data_math["bus_lookup"][nodes[wdg_id]],
                     "t_bus"         => transformer_t_bus_w[wdg_id],
                     "tm_nom"        => tm_nom,
@@ -1194,7 +1194,7 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
     voltage_scale_factor_sqrt3 = voltage_scale_factor * sqrt(3)
 
     for (name, ravens_obj) in get(energy_connections, "EnergyConsumer", Dict{Any,Dict{String,Any}}())
-        math_obj = _init_math_obj_ravens("energy_consumer", name, ravens_obj, length(data_math["load"]) + 1; pass_props=pass_props)
+        math_obj = _init_math_obj_ravens("EnergyConsumer", name, ravens_obj, length(data_math["load"]) + 1; pass_props=pass_props)
 
         # Set the load bus based on connectivity node
         connectivity_node = _extract_name(ravens_obj["ConductingEquipment.Terminals"][1]["Terminal.ConnectivityNode"])
@@ -1411,7 +1411,7 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
     voltage_scale_factor_sqrt3 = voltage_scale_factor * sqrt(3)
 
     for (name, ravens_obj) in get(energy_connections, "EnergySource", Dict{Any,Dict{String,Any}}())
-        math_obj = _init_math_obj_ravens("energy_source", name, ravens_obj, length(data_math["gen"]) + 1; pass_props=pass_props)
+        math_obj = _init_math_obj_ravens("EnergySource", name, ravens_obj, length(data_math["gen"]) + 1; pass_props=pass_props)
         math_obj["name"] = "_virtual_gen.energy_source.$name"
 
         # Get connectivity node info (bus info)
@@ -1481,7 +1481,7 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
 
         # Control mode and source ID
         math_obj["control_mode"] = Int(get(ravens_obj, "EnergySource.connectionKind", ISOCHRONOUS))
-        math_obj["source_id"] = "energy_source.$name"
+        math_obj["source_id"] = "EnergySource.$name"
 
         # Add generator cost model
         _add_gen_cost_model!(math_obj, ravens_obj)
@@ -1500,7 +1500,7 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
                 "index" => length(data_math["bus"]) + 1,
                 "terminals" => math_obj["connections"],
                 "grounded" => zeros(Bool, nphases),
-                "name" => "_virtual_bus.energy_source.$name",
+                "name" => "_virtual_bus.EnergySource.$name",
                 "bus_type" => math_obj["gen_status"] == 0 ? 4 : math_obj["control_mode"] == Int(ISOCHRONOUS) ? 3 : 2,
                 "vm" => fill(ravens_obj["EnergySource.voltageMagnitude"] / voltage_scale_factor_sqrt3, nphases),
                 "va" => rad2deg.(_wrap_to_pi.([-2 * π / nphases * (i - 1) + get(ravens_obj, "EnergySource.voltageAngle", 0.0) for i in 1:nphases])),
@@ -1508,15 +1508,15 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
                 "vmax" => fill(ravens_obj["EnergySource.voltageMagnitude"] / voltage_scale_factor_sqrt3, nphases),
                 "vm_pair_lb" => deepcopy(get(ravens_obj, "EnergySource.vpairMin", Tuple{Any,Any,Real}[])),
                 "vm_pair_ub" => deepcopy(get(ravens_obj, "EnergySource.vpairMax", Tuple{Any,Any,Real}[])),
-                "source_id" => "energy_source.$name",
+                "source_id" => "EnergySource.$name",
             )
 
             math_obj["gen_bus"] = bus_obj["bus_i"]
             data_math["bus"]["$(bus_obj["index"])"] = bus_obj
 
             branch_obj = Dict(
-                "name" => "_virtual_branch.energy_source.$name",
-                "source_id" => "energy_source.$name",
+                "name" => "_virtual_branch.EnergySource.$name",
+                "source_id" => "EnergySource.$name",
                 "f_bus" => bus_obj["bus_i"],
                 "t_bus" => gen_bus,
                 "f_connections" => math_obj["connections"],
@@ -1571,7 +1571,7 @@ function _map_ravens2math_rotating_machine!(data_math::Dict{String,<:Any}, data_
 
         for (name, ravens_obj) in get(regulating_cond_eq, "RotatingMachine", Dict{Any,Dict{String,Any}}())
 
-            math_obj = _init_math_obj_ravens("rotating_machine", name, ravens_obj, length(data_math["gen"])+1; pass_props=pass_props)
+            math_obj = _init_math_obj_ravens("RotatingMachine", name, ravens_obj, length(data_math["gen"])+1; pass_props=pass_props)
 
             # Connections/phases obtained from Terminals
             connections = _phasecode_map[get(ravens_obj["ConductingEquipment.Terminals"][1], "Terminal.phases", "PhaseCode.ABC")]
@@ -1687,7 +1687,7 @@ function _map_ravens2math_power_electronics!(data_math::Dict{String,<:Any}, data
 
             if (pec_type == "PhotoVoltaicUnit")
 
-                math_obj = _init_math_obj_ravens("photovoltaic_unit", name, ravens_obj, length(data_math["gen"])+1; pass_props=pass_props)
+                math_obj = _init_math_obj_ravens("PhotoVoltaicUnit", name, ravens_obj, length(data_math["gen"])+1; pass_props=pass_props)
 
                 # Connections/phases
                 connections = _phasecode_map[get(ravens_obj["ConductingEquipment.Terminals"][1], "Terminal.phases", "PhaseCode.ABC")]
@@ -1773,7 +1773,7 @@ function _map_ravens2math_power_electronics!(data_math::Dict{String,<:Any}, data
 
             elseif (pec_type == "BatteryUnit")
 
-                math_obj = _init_math_obj_ravens("storage", name, ravens_obj, length(data_math["storage"])+1; pass_props=pass_props)
+                math_obj = _init_math_obj_ravens("BatteryUnit", name, ravens_obj, length(data_math["storage"])+1; pass_props=pass_props)
 
                 # Connections/phases
                 connections = _phasecode_map[get(ravens_obj["ConductingEquipment.Terminals"][1], "Terminal.phases", "PhaseCode.ABC")]
@@ -1858,7 +1858,7 @@ function _map_ravens2math_switch!(data_math::Dict{String,<:Any}, data_ravens::Di
 
     for (name, ravens_obj) in get(conducting_equipment, "Switch", Dict{Any,Dict{String,Any}}())
 
-        math_obj = _init_math_obj_ravens("switch", name, ravens_obj, length(data_math["switch"])+1; pass_props=pass_props)
+        math_obj = _init_math_obj_ravens("Switch", name, ravens_obj, length(data_math["switch"])+1; pass_props=pass_props)
 
         # Terminals and phases
         terminals = ravens_obj["ConductingEquipment.Terminals"]
@@ -1973,7 +1973,7 @@ function _map_ravens2math_shunt_compensator!(data_math::Dict{String,<:Any}, data
 
         for (name, ravens_obj) in get(regulating_cond_eq, "ShuntCompensator", Dict{Any,Dict{String,Any}}())
 
-            math_obj = _init_math_obj("shunt", name, ravens_obj, length(data_math["shunt"])+1; pass_props=pass_props)
+            math_obj = _init_math_obj("ShuntCompensator", name, ravens_obj, length(data_math["shunt"])+1; pass_props=pass_props)
 
             # Get connectivity node info (bus info)
             connectivity_node = _extract_name(ravens_obj["ConductingEquipment.Terminals"][1]["Terminal.ConnectivityNode"])
