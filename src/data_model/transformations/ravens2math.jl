@@ -1324,10 +1324,10 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
                     unit_symbol = schdl["BasicIntervalSchedule.value1Unit"]
                     value1_unit = lowercase(unit_symbol[findfirst(isequal('.'), unit_symbol) + 1:end])
                     if value1_unit == "w"
-                        math_obj["pd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value1", 0.0) * value1_multiplier / power_scale_factor, nphases)
+                        math_obj["pd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value1", 0.0) * value1_multiplier / (power_scale_factor*nphases), nphases)
                     end
                     if value1_unit == "var"
-                        math_obj["qd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value1", 0.0) * value1_multiplier / power_scale_factor, nphases)
+                        math_obj["qd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value1", 0.0) * value1_multiplier / (power_scale_factor*nphases), nphases)
                     end
                 end
 
@@ -1335,10 +1335,10 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
                     unit_symbol = schdl["BasicIntervalSchedule.value2Unit"]
                     value2_unit = lowercase(unit_symbol[findfirst(isequal('.'), unit_symbol) + 1:end])
                     if value2_unit == "w"
-                        math_obj["pd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value2", 0.0) * value2_multiplier / power_scale_factor, nphases)
+                        math_obj["pd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value2", 0.0) * value2_multiplier / (power_scale_factor*nphases), nphases)
                     end
                     if value2_unit == "var"
-                        math_obj["qd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value2", 0.0) * value2_multiplier / power_scale_factor, nphases)
+                        math_obj["qd"] = fill(get(schdl["EnergyConsumerSchedule.RegularTimePoints"][nw], "RegularTimePoint.value2", 0.0) * value2_multiplier / (power_scale_factor*nphases), nphases)
                     end
                 end
 
@@ -1741,22 +1741,60 @@ function _map_ravens2math_power_electronics!(data_math::Dict{String,<:Any}, data
                 # TODO: refactor the calculation of N when connections and configuration issues are solved.
                 N = math_obj["configuration"]==DELTA && length(connections)==1 ? 1 : _infer_int_dim(connections,  math_obj["configuration"], false) # if solar is delta-connected to triplex node, N can be equal to 1
 
-                # Set pmax
-                if !haskey(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.maxP")
-                    math_obj["pmax"] = ((get(ravens_obj, "PowerElectronicsConnection.ratedS", Inf) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
+                # Set pg/pmax and qg/qmax (w/ multinetwork support)
+                if nw==0
+                    if !haskey(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.maxP")
+                        math_obj["pmax"] = ((get(ravens_obj, "PowerElectronicsConnection.ratedS", Inf) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
+                    else
+                        math_obj["pmax"] = ((get(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.maxP", Inf) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
+                    end
+                    math_obj["pg"] = (get(ravens_obj, "PowerElectronicsConnection.p", 0.0) * -ones(nconductors) ./ nconductors)./(power_scale_factor)
                 else
-                    math_obj["pmax"] = ((get(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.maxP", Inf) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
+
+                    # Get timeseries schedule
+                    if haskey(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PhotoVoltaicUnit.GenerationProfile")
+
+                        # initialization of pg values for multiplier case
+                        pmax = zeros(Float64, nconductors)
+                        pg = zeros(Float64, nconductors)
+                        pmax = (get(ravens_obj, "PowerElectronicsConnection.p", 0.0) * -ones(nconductors) ./ nconductors)./(power_scale_factor)
+                        pg = (get(ravens_obj, "PowerElectronicsConnection.p", 0.0) * -ones(nconductors) ./ nconductors)./(power_scale_factor)
+
+                        curve_name = _extract_name(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"]["PhotoVoltaicUnit.GenerationProfile"])
+                        curve = data_ravens["Curve"][curve_name]
+
+                        # multiplier modifier
+                        if haskey(curve, "Curve.y1Multiplier")
+                            value1_multiplier = _multipliers_map[curve["Curve.y1Multiplier"]]
+                        else
+                            value1_multiplier = 1.0
+                        end
+
+                        # Actual values
+                        if haskey(curve, "Curve.y1Unit")
+                            unit_symbol = curve["Curve.y1Unit"]
+                            value1_unit = lowercase(unit_symbol[findfirst(isequal('.'), unit_symbol) + 1:end])
+                            if value1_unit == "w"
+                                math_obj["pg"] = (get(curve["Curve.CurveDatas"][nw], "CurveData.y1value", 0.0) * value1_multiplier * -ones(nconductors) ./ nconductors)./(power_scale_factor)
+                                math_obj["pmax"] = math_obj["pg"].*-1
+                            end
+                        end
+
+                        # Multipliers instead of actual values
+                        if !haskey(curve, "Curve.y1Unit")
+                            math_obj["pg"] = -get(curve["Curve.CurveDatas"][nw], "CurveData.y1value", 1.0) .* pg
+                            math_obj["pmax"] = math_obj["pg"].*-1
+                        end
+
+                    else
+                        @error("No timeseries, dispatch profile or multinetwork information found!")
+                    end
+
                 end
-                # Set pmin
-                math_obj["pmin"] = ((get(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.minP", 0) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
-                # Set qmin
+
+                math_obj["pmin"] = ((get(ravens_obj["PowerElectronicsConnection.PowerElectronicsUnit"], "PowerElectronicsUnit.minP", 0.0) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
                 math_obj["qmin"] = ((get(ravens_obj, "PowerElectronicsConnection.minQ", -0) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
-                # Set qmax
                 math_obj["qmax"] = ((get(ravens_obj, "PowerElectronicsConnection.maxQ", 0) * ones(nconductors)) ./ nconductors)./(power_scale_factor)
-
-
-                # Set pg and qg
-                math_obj["pg"] = (get(ravens_obj, "PowerElectronicsConnection.p", 0.0) * -ones(nconductors) ./ nconductors)./(power_scale_factor)
                 math_obj["qg"] = (get(ravens_obj, "PowerElectronicsConnection.q", 0.0) * -ones(nconductors) ./ nconductors)./(power_scale_factor)
 
                 # TODO: add a polynomial parameters to be added to gen cost

@@ -20,18 +20,18 @@ _phase_map = Dict(
 )
 
 const _multipliers_map = Dict(
-    "m" => 1e-3,
-    "c" => 1e-2,
-    "d" => 1e-1,
-    "da" => 1e1,
-    "h" => 1e2,
-    "k" => 1e3,
-    "M" => 1e6,
-    "G" => 1e9,
-    "T" => 1e12,
-    "P" => 1e15,
-    "E" => 1e18,
-    "Z" => 1e21
+    "UnitMultiplier.m" => 1e-3,
+    "UnitMultiplier.c" => 1e-2,
+    "UnitMultiplier.d" => 1e-1,
+    "UnitMultiplier.da" => 1e1,
+    "UnitMultiplier.h" => 1e2,
+    "UnitMultiplier.k" => 1e3,
+    "UnitMultiplier.M" => 1e6,
+    "UnitMultiplier.G" => 1e9,
+    "UnitMultiplier.T" => 1e12,
+    "UnitMultiplier.P" => 1e15,
+    "UnitMultiplier.E" => 1e18,
+    "UnitMultiplier.Z" => 1e21
 )
 
 
