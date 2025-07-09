@@ -161,3 +161,116 @@ function apply_voltage_bounds_math!(data::Dict{String,<:Any}; vm_lb::Union{Real,
         end
     end
 end
+
+
+
+function build_base_voltage_graphs(data::Dict{String,<:Any})::Tuple{Dict{Int,String}, Graphs.SimpleGraph}
+    nodes = Dict(cn => n for (n, cn) in enumerate(keys(data["ConnectivityNode"])))
+    G = Graphs.SimpleGraph(length(nodes))
+
+    for edge_dicts in [
+        _recursive_dict_get(data, ["PowerSystemResource", "Equipment", "ConductingEquipment", "Conductor", "ACLineSegment"], Dict()),
+        _recursive_dict_get(data, ["PowerSystemResource", "Equipment", "ConductingEquipment", "Switch"], Dict())
+    ]
+        for (i, edge) in edge_dicts
+            Graphs.add_edge!(G, nodes[match(Regex("ConnectivityNode::'(.+)'"), edge["ConductingEquipment.Terminals"][1]["Terminal.ConnectivityNode"]).captures[1]], nodes[match(Regex("ConnectivityNode::'(.+)'"), edge["ConductingEquipment.Terminals"][2]["Terminal.ConnectivityNode"]).captures[1]])
+        end
+    end
+
+    return Dict{Int,String}(n => cn for (cn, n) in nodes), G
+end
+
+function find_voltages(data::Dict{String,<:Any})::Dict{String,Any}
+    voltages = Dict{String,Any}()
+
+    for (i, es) in _recursive_dict_get(data, ["PowerSystemResource", "Equipment", "ConductingEquipment", "EnergyConnection", "EnergySource"], Dict())
+        nominal_voltage = get(es, "EnergySource.nominalVoltage", missing)
+        if !ismissing(nominal_voltage)
+            voltages[match(Regex("ConnectivityNode::'(.+)'"), es["ConductingEquipment.Terminals"][1]["Terminal.ConnectivityNode"]).captures[1]] = nominal_voltage
+        end
+    end
+
+    for (i, tr) in _recursive_dict_get(data, ["PowerSystemResource", "Equipment", "ConductingEquipment", "PowerTransformer"], Dict())
+        info_name = match(Regex("TransformerTankInfo::'(.*)'"), get(get(tr, "PowerTransformer.TransformerTank", [Dict()])[1], "PowerSystemResource.AssetDatasheet", "TransformerTankInfo::''")).captures[1]
+        trinfos = _recursive_dict_get(data, ["AssetInfo", "PowerTransformerInfo", info_name, "PowerTransformerInfo.TransformerTankInfos", info_name, "TransformerTankInfo.TransformerEndInfos"], [])
+rated_u = merge(
+            filter(x -> !ismissing(x.second), Dict(get(trinfo, "TransformerEndInfo.endNumber", n) => get(trinfo, "TransformerEndInfo.ratedU", missing) for (n, trinfo) in enumerate(trinfos))),
+            filter(x -> !ismissing(x.second), Dict(get(pte, "endNumber", n) => get(pte, "PowerTransformerEnd.ratedU", missing) for (n, pte) in enumerate(get(tr, "PowerTransformer.PowerTransformerEnd", []))))
+        )
+        for (n, term) in enumerate(get(tr, "ConductingEquipment.Terminals", []))
+            voltages[match(Regex("ConnectivityNode::'(.+)'"), term["Terminal.ConnectivityNode"]).captures[1]] = get(rated_u, n, missing)
+        end
+    end
+
+    return voltages
+end
+
+
+function find_base_voltages(data::Dict{String,<:Any})::Dict{String,Any}
+    node_lookup, G = build_base_voltage_graphs(data)
+
+    voltages = find_voltages(data)
+
+    ccs = Graphs.connected_components(G)
+
+    voltage_per_cc = Dict()
+    for (n, cc) in enumerate(ccs)
+        for i in cc
+            if node_lookup[i] in keys(voltages)
+                voltage_per_cc[n] = voltages[node_lookup[i]]
+                break
+            end
+        end
+    end
+
+    return Dict{String,Any}(node_lookup[i] => get(voltage_per_cc, n, missing) for (n, cc) in enumerate(ccs) for i in cc)
+end
+
+function _recursive_dict_get(dict::Dict, path::Vector{<:Any}, default::Any)::Any
+    if length(path) > 1
+        return _recursive_dict_get(get(dict, path[1], Dict()), path[2:end], default)
+    else
+        return get(dict, path[1], default)
+    end
+end
+
+function _recursive_dict_set!(dict::Dict, path::Vector{<:Any}, value::Any)
+    if length(path) > 1
+        _recursive_dict_set!(dict[path[1]], path[2:end], value)
+    else
+        dict[path[1]] = value
+    end
+end
+
+function add_base_voltages!(data::Dict{String,<:Any}; overwrite::Bool=false)::Nothing
+    if overwrite || "BaseVoltage" ∉ keys(data)
+        data["BaseVoltage"] = Dict{String,Any}()
+    end
+
+    base_voltages = find_base_voltages(data)
+
+    unique_bv = unique(values(base_voltages))
+
+    for bv in unique_bv
+        data["BaseVoltage"]["RAVENS_BaseV_$(bv/1000.0)_kV"] = Dict{String,Any}(
+            "IdentifedObject.name" => "RAVENS_BaseV_$(bv) V",
+            "IdentifedObject.mRID" => "$(UUIDs.uuid4())",
+            "Ravens.cimObjectType" => "BaseVoltage",
+            "BaseVoltage.nominalVoltage" => bv
+        )
+    end
+
+    encon_path = ["PowerSystemResource", "Equipment", "ConductingEquipment", "EnergyConnection"]
+
+    for path in [["EnergyConsumer"], ["EnergySource"], ["RegulatingCondEq", "PowerElectronicsConnection"], ["RegulatingCondEq", "RotatingMachine"]]
+        path = [encon_path..., path...]
+        for (i, item) in _recursive_dict_get(data, path, Dict())
+            if !overwrite && "ConductingEquipment.BaseVoltage" ∈ keys(item)
+                continue
+            else
+                cn = match(Regex("ConnectivityNode::'(.+)'"), item["ConductingEquipment.Terminals"][1]["Terminal.ConnectivityNode"]).captures[1]
+                _recursive_dict_set!(data, [path..., i, "ConductingEquipment.BaseVoltage"], "BaseVoltage::'RAVENS_BaseV_$(base_voltages[cn]/1000.0)_kV'")
+            end
+        end
+    end
+end

@@ -71,6 +71,8 @@ function _map_ravens2math(
 
     _data_ravens = deepcopy(data_ravens)
 
+    add_base_voltages!(_data_ravens; overwrite=false)
+
     # TODO: Add settings (defaults)
     basemva = 1
     _settings = Dict("sbase_default" => basemva * 1e3,
@@ -1179,7 +1181,7 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
 
     # Checks and calculates voltage bases for elements that do not have Voltage Bases.
     # TODO: Revise if this is the best way to be calculate vbases for missing elements
-    data_math["settings"]["vbases_buses"] = calc_math_voltage_bases(data_math, data_math["settings"]["vbases_network"])[1] # [1] bus_vbase, [2] edge_vbase
+    # data_math["settings"]["vbases_buses"] = calc_math_voltage_bases(data_math, data_math["settings"]["vbases_network"])[1] # [1] bus_vbase, [2] edge_vbase
 
 end
 

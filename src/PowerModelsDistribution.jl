@@ -24,6 +24,7 @@ module PowerModelsDistribution
     import LinearAlgebra
     import Statistics
     import SparseArrays
+    import UUIDs
 
     import LinearAlgebra: diagm, factorize
     import Statistics: mean, std
