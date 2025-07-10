@@ -80,9 +80,6 @@ function _map_ravens2math(
                     "power_scale_factor" => 1e3,
                     "base_frequency" => get(_data_ravens, "BaseFrequency", 60.0),
                     "vbases_default" => Dict{String,Real}(),
-                    "vbases_network" => Dict{String,Real}(),
-                    "vbases_buses" => Dict{String,Real}()
-
     )
 
     # Multinetwork
@@ -642,9 +639,6 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                 snom[wdg_endNumber] = wdgs[wdg_endNumber]["PowerTransformerEnd.ratedS"]
                 zbase[wdg_endNumber] = (vnom[wdg_endNumber]^2)/snom[wdg_endNumber]
 
-                # Add vnom info to vbases
-                data_math["settings"]["vbases_network"][string(bus)] = deepcopy(vnom[wdg_endNumber]/voltage_scale_factor)
-
                 # Transformer impedance when values are missing for other windings.
                 xfmr_star_impedance = get(wdgs[wdg_endNumber], "TransformerEnd.StarImpedance", Dict())
                 xfmr_star_impedance_r = get(xfmr_star_impedance, "TransformerStarImpedance.r", 0.0)
@@ -1089,8 +1083,6 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                     bus_data["vmax"] = fill(Inf, nphases)
                     bus_data["grounded"] = zeros(Bool, nphases)
                 end
-                # Add vnom info to bus
-                data_math["settings"]["vbases_network"][string(bus)] = deepcopy(vnom[i]/voltage_scale_factor)
             end
 
             # wdg i, tank 1  - assumes tank 1 always exists
@@ -1179,10 +1171,6 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
         end
     end
 
-    # Checks and calculates voltage bases for elements that do not have Voltage Bases.
-    # TODO: Revise if this is the best way to be calculate vbases for missing elements
-    # data_math["settings"]["vbases_buses"] = calc_math_voltage_bases(data_math, data_math["settings"]["vbases_network"])[1] # [1] bus_vbase, [2] edge_vbase
-
 end
 
 
@@ -1229,13 +1217,9 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
         bus_conn = data_math["bus"][bus_info]
 
         # Set the nominal voltage
-        if haskey(ravens_obj, "ConductingEquipment.BaseVoltage")
-            base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
-            base_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
-            math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor_sqrt3)
-        else
-            math_obj["vnom_kv"] = data_math["settings"]["vbases_buses"][bus_info]
-        end
+        base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
+        base_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
+        math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor_sqrt3)
 
         if haskey(data_ravens["ConnectivityNode"][connectivity_node], "ConnectivityNode.OperationalLimitSet")
             op_limit_id = _extract_name(data_ravens["ConnectivityNode"][connectivity_node]["ConnectivityNode.OperationalLimitSet"])
@@ -1602,16 +1586,13 @@ function _map_ravens2math_rotating_machine!(data_math::Dict{String,<:Any}, data_
             bus_type = data_math["bus"]["$(math_obj["gen_bus"])"]["bus_type"]
             data_math["bus"]["$(math_obj["gen_bus"])"]["bus_type"] = _compute_bus_type(bus_type, status, control_mode)
 
-           # Set the nominal voltage
-           bus_conn =  data_math["bus"]["$(math_obj["gen_bus"])"]
-           if haskey(ravens_obj, "ConductingEquipment.BaseVoltage")
-               base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
-               nominal_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
-               base_voltage =  nominal_voltage / sqrt(nconductors)
-               math_obj["vbase"] =  base_voltage / voltage_scale_factor
-           else
-                math_obj["vbase"] = data_math["settings"]["vbases_buses"][string(math_obj["gen_bus"])]
-           end
+            # Set the nominal voltage
+            bus_conn =  data_math["bus"]["$(math_obj["gen_bus"])"]
+            base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
+            nominal_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
+            base_voltage =  nominal_voltage / sqrt(nconductors)
+            math_obj["vbase"] =  base_voltage / voltage_scale_factor
+
 
             if control_mode == Int(ISOCHRONOUS) && status == 1
                 data_math["bus"]["$(math_obj["gen_bus"])"]["vm"] = ((get(ravens_obj, "RotatingMachine.ratedU", nominal_voltage))/nominal_voltage)* ones(nconductors)
@@ -1711,15 +1692,10 @@ function _map_ravens2math_power_electronics!(data_math::Dict{String,<:Any}, data
 
                 # Set the nominal voltage
                 bus_conn =  data_math["bus"]["$(math_obj["gen_bus"])"]
-                if haskey(ravens_obj, "ConductingEquipment.BaseVoltage")
-                    base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
-                    nominal_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
-                    base_voltage =  nominal_voltage / sqrt(nconductors)
-                    math_obj["vbase"] =  base_voltage / voltage_scale_factor
-                else
-                    math_obj["vbase"] = data_math["settings"]["vbases_buses"][string(math_obj["gen_bus"])]
-                    nominal_voltage = math_obj["vbase"] * voltage_scale_factor * sqrt(nconductors)
-                end
+                base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
+                nominal_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
+                base_voltage =  nominal_voltage / sqrt(nconductors)
+                math_obj["vbase"] =  base_voltage / voltage_scale_factor
 
                 if control_mode == Int(ISOCHRONOUS) && status == 1
                     data_math["bus"]["$(math_obj["gen_bus"])"]["vm"] = ((get(ravens_obj, "PowerElectronicsConnection.ratedU", nominal_voltage))/nominal_voltage)* ones(nconductors)
