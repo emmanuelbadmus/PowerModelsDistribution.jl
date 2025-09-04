@@ -193,10 +193,19 @@ function find_voltages(data::Dict{String,<:Any})::Dict{String,Any}
     for (i, tr) in _recursive_dict_get(data, ["PowerSystemResource", "Equipment", "ConductingEquipment", "PowerTransformer"], Dict())
         info_name = match(Regex("TransformerTankInfo::'(.*)'"), get(get(tr, "PowerTransformer.TransformerTank", [Dict()])[1], "PowerSystemResource.AssetDatasheet", "TransformerTankInfo::''")).captures[1]
         trinfos = _recursive_dict_get(data, ["AssetInfo", "PowerTransformerInfo", info_name, "PowerTransformerInfo.TransformerTankInfos", info_name, "TransformerTankInfo.TransformerEndInfos"], [])
+
+        # Corrects voltage ratios for TransformerTanks with Single-phase Tanks datasheets
+        voltage_ratios = ones(length(tr["ConductingEquipment.Terminals"]))
+        for wdg_id in 1:1:length(tr["ConductingEquipment.Terminals"])
+            conns = length(_phasecode_map[tr["ConductingEquipment.Terminals"][wdg_id]["Terminal.phases"]])
+            voltage_ratios[wdg_id] = conns >= 3 ? sqrt(3) : 1.0
+        end
+
         rated_u = merge(
-            filter(x -> !ismissing(x.second), Dict(get(trinfo, "TransformerEndInfo.endNumber", n) => get(trinfo, "TransformerEndInfo.ratedU", missing) for (n, trinfo) in enumerate(trinfos))),
+            filter(x -> !ismissing(x.second), Dict(get(trinfo, "TransformerEndInfo.endNumber", n) => get(trinfo, "TransformerEndInfo.ratedU", missing) * voltage_ratios[n] for (n, trinfo) in enumerate(trinfos))),
             filter(x -> !ismissing(x.second), Dict(get(pte, "endNumber", n) => get(pte, "PowerTransformerEnd.ratedU", missing) for (n, pte) in enumerate(get(tr, "PowerTransformer.PowerTransformerEnd", []))))
         )
+
         for (n, term) in enumerate(get(tr, "ConductingEquipment.Terminals", []))
             voltages[match(Regex("ConnectivityNode::'(.+)'"), term["Terminal.ConnectivityNode"]).captures[1]] = get(rated_u, n, missing)
         end
