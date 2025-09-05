@@ -1500,6 +1500,13 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
             math_obj["gen_bus"] = bus_obj["bus_i"]
             data_math["bus"]["$(bus_obj["index"])"] = bus_obj
 
+            # Impedance calculation
+            r = get(ravens_obj, "EnergySource.r", 0.0)
+            r0 = get(ravens_obj, "EnergySource.r0", 0.0)
+            x = get(ravens_obj, "EnergySource.x", 0.0)
+            x0 = get(ravens_obj, "EnergySource.x0", 0.0)
+            Z_ABC = _impedance_conversion_ravens_energy_source(data_ravens, ravens_obj, r+x*1im, r0+x0*1im)
+
             branch_obj = Dict(
                 "name" => "_virtual_branch.EnergySource.$name",
                 "source_id" => "EnergySource.$name",
@@ -1511,8 +1518,8 @@ function _map_ravens2math_energy_source!(data_math::Dict{String,<:Any}, data_rav
                 "angmax" => fill(10.0, nconductors),
                 "c_rating_a" => fill(Inf, nconductors),
                 "br_status" => math_obj["gen_status"],
-                "br_r" => _impedance_conversion_ravens_energy_source(data_ravens, ravens_obj, "EnergySource.r", "EnergySource.r0"),
-                "br_x" => _impedance_conversion_ravens_energy_source(data_ravens, ravens_obj, "EnergySource.x", "EnergySource.x0"),
+                "br_r" => real(Z_ABC),
+                "br_x" => imag(Z_ABC),
                 "g_fr" => zeros(nconductors, nconductors),
                 "g_to" => zeros(nconductors, nconductors),
                 "b_fr" => zeros(nconductors, nconductors),
