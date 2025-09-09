@@ -1086,11 +1086,11 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
             end
 
             # wdg i, tank 1  - assumes tank 1 always exists
-            r_s = [sum(r_s[i]) for i in 1:nrw]
-            x_sc = [sum(x_sc[i]) for i in 1:nrw] # sum the x_sc for all tanks per wdg
-            x_sc = [x_sc[1]]      # get x_sc wrt to wdg 1
-            g_sh = sum(g_sh)      # wrt to wdg 1
-            b_sh = sum(b_sh)      # wrt to wdg 1
+            r_s = [r_s[i][1] for i in 1:nrw]
+            x_sc = [x_sc[i][1] for i in 1:nrw] # sum the x_sc for all tanks per wdg
+            x_sc = [x_sc[1][1]]      # get x_sc wrt to wdg 1
+            g_sh = g_sh[1]      # wrt to wdg 1
+            b_sh = b_sh[1]      # wrt to wdg 1
 
             # convert x_sc from list of upper triangle elements to an explicit dict
             y_sh = g_sh + im*b_sh
@@ -1127,7 +1127,11 @@ function _map_ravens2math_power_transformer!(data_math::Dict{String,<:Any}, data
                 end
 
                 # tm_nom depending on wdg configuration
-                tm_nom = configuration[wdg_id]==DELTA ? vnom[wdg_id]*sqrt(3)/voltage_scale_factor : vnom[wdg_id]/voltage_scale_factor
+                if ntanks >= 3
+                    tm_nom = configuration[wdg_id]==DELTA ? vnom[wdg_id]/voltage_scale_factor : vnom[wdg_id]/voltage_scale_factor*sqrt(3)
+                else
+                    tm_nom = configuration[wdg_id]==DELTA ? vnom[wdg_id]/voltage_scale_factor : vnom[wdg_id]/voltage_scale_factor
+                end
 
                 # Transformer Object
                 transformer_2wa_obj = Dict{String,Any}(
@@ -1216,11 +1220,7 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
         bus_info = string(math_obj["load_bus"])
         bus_conn = data_math["bus"][bus_info]
 
-        # Set the nominal voltage
-        base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
-        base_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
-        math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor_sqrt3)
-
+        # OperationalLimitSets
         if haskey(data_ravens["ConnectivityNode"][connectivity_node], "ConnectivityNode.OperationalLimitSet")
             op_limit_id = _extract_name(data_ravens["ConnectivityNode"][connectivity_node]["ConnectivityNode.OperationalLimitSet"])
             op_limits = data_ravens["OperationalLimitSet"][op_limit_id]["OperationalLimitSet.OperationalLimitValue"]
@@ -1236,9 +1236,9 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
                 end
 
                 if lim_type == "OperationalLimitDirectionKind.high"
-                    op_limit_max = lim["VoltageLimit.value"] / voltage_scale_factor_sqrt3
+                    op_limit_max = lim["VoltageLimit.value"]
                 elseif lim_type == "OperationalLimitDirectionKind.low"
-                    op_limit_min = lim["VoltageLimit.value"] / voltage_scale_factor_sqrt3
+                    op_limit_min = lim["VoltageLimit.value"]
                 end
             end
 
@@ -1265,6 +1265,20 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
             bus_conn["vmax"] = fill(op_limit_max, nphases)
             bus_conn["vmin"] = fill(op_limit_min, nphases)
             math_obj["connections"] = bus_conn["terminals"]
+        end
+
+        # Set the nominal voltage
+        base_voltage_ref = _extract_name(ravens_obj["ConductingEquipment.BaseVoltage"])
+        base_voltage = data_ravens["BaseVoltage"][base_voltage_ref]["BaseVoltage.nominalVoltage"]
+
+        if nphases >= 3
+            math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor_sqrt3)
+            bus_conn["vmax"] = bus_conn["vmax"]./voltage_scale_factor_sqrt3
+            bus_conn["vmin"] = bus_conn["vmin"]./voltage_scale_factor_sqrt3
+        else
+            math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor)
+            bus_conn["vmax"] = bus_conn["vmax"]./voltage_scale_factor
+            bus_conn["vmin"] = bus_conn["vmin"]./voltage_scale_factor
         end
 
         # Set p and q (w/ multinetwork support)
