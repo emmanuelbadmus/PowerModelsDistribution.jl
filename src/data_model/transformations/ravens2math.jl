@@ -1236,9 +1236,9 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
                 end
 
                 if lim_type == "OperationalLimitDirectionKind.high"
-                    op_limit_max = lim["VoltageLimit.value"]
+                    op_limit_max = lim["VoltageLimit.value"]/voltage_scale_factor_sqrt3
                 elseif lim_type == "OperationalLimitDirectionKind.low"
-                    op_limit_min = lim["VoltageLimit.value"]
+                    op_limit_min = lim["VoltageLimit.value"]/voltage_scale_factor_sqrt3
                 end
             end
 
@@ -1273,12 +1273,8 @@ function _map_ravens2math_energy_consumer!(data_math::Dict{String,<:Any}, data_r
 
         if nphases >= 3
             math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor_sqrt3)
-            bus_conn["vmax"] = bus_conn["vmax"]./voltage_scale_factor_sqrt3
-            bus_conn["vmin"] = bus_conn["vmin"]./voltage_scale_factor_sqrt3
         else
             math_obj["vnom_kv"] = (base_voltage / voltage_scale_factor)
-            bus_conn["vmax"] = bus_conn["vmax"]./voltage_scale_factor
-            bus_conn["vmin"] = bus_conn["vmin"]./voltage_scale_factor
         end
 
         # Set p and q (w/ multinetwork support)
