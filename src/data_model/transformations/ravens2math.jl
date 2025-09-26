@@ -1723,9 +1723,14 @@ function _map_ravens2math_power_electronics!(data_math::Dict{String,<:Any}, data
                 end
 
                 # Set vg
+                if nconductors > 1
+                    m = sqrt(3)
+                else
+                    m = 1
+                end
                 for (fr_k, to_k) in [("PowerElectronicsConnection.ratedU", "vg")]
                     if haskey(ravens_obj, fr_k)
-                        math_obj[to_k] = (ravens_obj[fr_k]/nominal_voltage)*ones(nconductors)/voltage_scale_factor
+                        math_obj[to_k] = (nominal_voltage/m)*ones(nconductors)/voltage_scale_factor
                     end
                 end
 
