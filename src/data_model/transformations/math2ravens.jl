@@ -51,6 +51,27 @@ function _build_switch_entry(eq_type, eq_name, data)
 end
 
 
+# -------- FIX States solution from Gurobi ---- Some "state" values for switches are -1.0287133995719573e-10
+function _zero_tiny(x; tol=1e-9)
+    return abs(x) < tol ? 0.0 : x
+end
+
+function _fix_noninteger_states!(solution_math;  mn_flag::Bool=false)
+    if mn_flag
+        for (nw_id, nw_data) in solution_math["nw"]
+            for (sw_id, sw_sol) in nw_data["switch"]
+                sw_sol["state"] = _zero_tiny(sw_sol["state"])
+            end
+        end
+    else
+        for (sw_id, sw_sol) in solution_math["switch"]
+            sw_sol["state"] = _zero_tiny(sw_sol["state"])
+        end
+    end
+end
+
+#################################
+
 
 function transform_solution_ravens(
     solution_math::Dict{String,<:Any},
@@ -60,7 +81,8 @@ function transform_solution_ravens(
     convert_rad2deg::Bool=true,
     map_math2eng_extensions::Dict{String,<:Function}=Dict{String,Function}(),
     make_si_extensions::Vector{<:Function}=Function[],
-    dimensionalize_math_extensions::Dict{String,<:Dict{String,<:Vector{<:String}}}=Dict{String,Dict{String,Vector{String}}}()
+    dimensionalize_math_extensions::Dict{String,<:Dict{String,<:Vector{<:String}}}=Dict{String,Dict{String,Vector{String}}}(),
+    fix_switch_states::Bool=false
 )::Dict{String,Any}
 
     @assert ismath(data_math) "cannot be converted. Not a MATH model."
@@ -81,6 +103,11 @@ function transform_solution_ravens(
     nw_data = mn_flag ? data_math["nw"]["1"] : data_math
     sol = mn_flag ? solution_math["nw"]["1"] : solution_math
     time_elapsed = get(data_math, "time_elapsed", 1.0)
+
+    # Fix Switch states -  "state" values for switches are -1.0287133995719573e-10 coming from some solvers
+    if fix_switch_states
+        _fix_noninteger_states!(solution_math; mn_flag=mn_flag)
+    end
 
     # PowerFlow solutions for Transformers elements
     seen_xfrmrs = Set{String}()     # Set to save xfrmr names

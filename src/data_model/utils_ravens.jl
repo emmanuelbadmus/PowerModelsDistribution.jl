@@ -113,6 +113,13 @@ function _extract_name(element)
     return name
 end
 
+"extracts the type from a ravens reference string"
+function _extract_type(element)
+
+    name = replace(split(element, "::")[1], "'" => "")
+    return name
+end
+
 
 "calculates the shunt admittance matrix based on terminals and b or g"
 function _calc_shunt_admittance_matrix(terminals, b)
