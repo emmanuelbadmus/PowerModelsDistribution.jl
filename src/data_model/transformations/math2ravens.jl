@@ -56,16 +56,27 @@ function _zero_tiny(x; tol=1e-9)
     return abs(x) < tol ? 0.0 : x
 end
 
+function _round_almost_integer(x; tol=1e-9)
+    # Get the nearest integer to x.
+    r = round(Int, x)
+
+    # Check if the absolute difference between x and the nearest integer is within the tolerance.
+    # If so, return the integer. Otherwise, return the original floating-point number.
+    return abs(x - r) < tol ? r : x
+end
+
 function _fix_noninteger_states!(solution_math;  mn_flag::Bool=false)
     if mn_flag
         for (nw_id, nw_data) in solution_math["nw"]
             for (sw_id, sw_sol) in nw_data["switch"]
                 sw_sol["state"] = _zero_tiny(sw_sol["state"])
+                sw_sol["state"] = _round_almost_integer(sw_sol["state"])
             end
         end
     else
         for (sw_id, sw_sol) in solution_math["switch"]
             sw_sol["state"] = _zero_tiny(sw_sol["state"])
+            sw_sol["state"] = _round_almost_integer(sw_sol["state"])
         end
     end
 end
