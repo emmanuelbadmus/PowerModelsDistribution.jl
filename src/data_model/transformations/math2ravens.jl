@@ -52,11 +52,11 @@ end
 
 
 # -------- FIX States solution from Gurobi ---- Some "state" values for switches are -1.0287133995719573e-10
-function _zero_tiny(x; tol=1e-9)
+function _zero_tiny(x; tol=1e-6)
     return abs(x) < tol ? 0.0 : x
 end
 
-function _round_almost_integer(x; tol=1e-9)
+function _round_almost_integer(x; tol=1e-6)
     # Get the nearest integer to x.
     r = round(Int, x)
 
