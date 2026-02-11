@@ -19,3 +19,6 @@ examples/*.toml
 examples/Native Power Flow - script.jl
 
 debug/
+pmd_sysimage.so
+*.log
+error_log.txt
